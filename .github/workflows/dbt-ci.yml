@@ -8,7 +8,7 @@ on:
 
 jobs:
   dbt-ci:
-    name: dbt build (CI)
+    name: dbt build (slim CI)
     runs-on: ubuntu-latest
     timeout-minutes: 30
 
@@ -23,10 +23,29 @@ jobs:
       PR_NUMBER: ${{ github.event.pull_request.number }}
 
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Install Snowflake CLI
         uses: Snowflake-Labs/snowflake-cli-action@v1
         with:
           cli-version: latest
+
+      - name: Compute changed models
+        id: changes
+        run: |
+          git fetch origin main --depth=1
+          CHANGED=$(git diff --name-only origin/main...HEAD -- 'models/**/*.sql' \
+            | sed 's|models/.*/||; s|\.sql$||' \
+            | awk '{printf "%s+ ", $0}' \
+            | xargs)
+          echo "models=$CHANGED" >> $GITHUB_OUTPUT
+          if [ -z "$CHANGED" ]; then
+            echo "No model changes — full build"
+          else
+            echo "Changed models: $CHANGED"
+          fi
 
       - name: Seed CI schema
         run: |
@@ -36,10 +55,17 @@ jobs:
           EOF
           snow sql --connection ci -f /tmp/seed.sql
 
-      - name: Build and test (CI)
+      - name: Build and test (slim CI)
         run: |
+          CHANGED="${{ steps.changes.outputs.models }}"
+          if [ -z "$CHANGED" ]; then
+            BUILD_ARGS="build"
+          else
+            BUILD_ARGS="build --select $CHANGED"
+          fi
+
           cat > /tmp/build.sql <<EOF
           EXECUTE DBT PROJECT $DBT_PROJECT_FQN
-            args='build --target check --vars {pr_number: $PR_NUMBER}';
+            args='$BUILD_ARGS --target check --vars {pr_number: $PR_NUMBER}';
           EOF
           snow sql --connection ci -f /tmp/build.sql

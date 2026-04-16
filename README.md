@@ -14,10 +14,11 @@ This is a companion to [cloud-adjacent-pipeline](https://github.com/sfc-gh-mwink
 │                                                                 │
 │  PR opened/updated                                              │
 │    └── dbt-ci.yml                                               │
-│          1. Install Snowflake CLI         (~5s)                 │
-│          2. EXECUTE DBT PROJECT ... seed  ──────────────────┐   │
-│          3. EXECUTE DBT PROJECT ... build ──────────────┐   │   │
-│             Result: PASS → merge / FAIL → blocked        │   │   │
+│          1. Checkout + git diff → compute changed models  (~5s) │
+│          2. Install Snowflake CLI                         (~5s) │
+│          3. EXECUTE DBT PROJECT ... seed  ──────────────────┐  │
+│          4. EXECUTE DBT PROJECT ... build --select <changed>+┐ │
+│             Result: PASS → merge / FAIL → blocked            │ │
 │                                                          │   │   │
 │  Push to main                                            ▼   ▼   │
 │    └── dbt-prod.yml                               ┌────────────┐ │
@@ -50,7 +51,7 @@ This is a companion to [cloud-adjacent-pipeline](https://github.com/sfc-gh-mwink
 | Auth | RSA key pair | Username / password |
 | `pip install dbt` per run | Yes | No |
 | Network policy for CI user | Required | Not required |
-| Slim CI | Yes | Roadmap |
+| Slim CI | Yes (`state:modified+`) | Yes (git-diff model selection) |
 | GHA runner minutes for build | High | Minimal |
 
 Both repos share the same dbt project structure, macros, and schema isolation logic. Only the execution layer and auth differ.
@@ -77,6 +78,10 @@ raw_events (seed)
 **Username/password auth** — simpler to set up than RSA key pairs; appropriate when the CI user's network access is controlled at the Snowflake level rather than via a network policy.
 
 **Per-PR layer-namespaced schemas** — same `generate_schema_name` macro as cloud-adjacent-pipeline. Each layer gets its own schema (`seeds_dbt_pr_N`, `staging_dbt_pr_N`, `marts_dbt_pr_N`), all dropped on PR close.
+
+**Slim CI via git diff** — Changed models are derived from `git diff origin/main...HEAD -- 'models/**/*.sql'`. Each is passed to `EXECUTE DBT PROJECT` as `--select model+ model2+` so dbt handles downstream selection natively. Falls back to a full build if no model files changed.
+
+**`clone_incrementals_for_ci` hook** — Clones incremental tables from prod into the CI schema before the build. Uses `node.config.schema ~ '_' ~ target.schema` to resolve the correct layer-namespaced destination (e.g. `marts_dbt_pr_42`) rather than the raw `target.schema`.
 
 ---
 

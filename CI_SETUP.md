@@ -136,24 +136,24 @@ PR pushed
   │
   ├── GHA runner (Snowflake CLI only — no dbt installed)
   │     │
-  │     ├── Install Snowflake CLI                  ← ~5s
+  │     ├── Checkout + git diff origin/main...HEAD           ← changed .sql files
+  │     │     └── maps to model names, appends '+' for downstream
   │     │
-  │     ├── snow sql: EXECUTE DBT PROJECT ... seed  ─────────────────┐
-  │     │     args='seed --target check                               │
-  │     │           --vars {pr_number: 42}'                           │ Snowflake
-  │     │                                           ◄─────────────────┤ compute
-  │     └── snow sql: EXECUTE DBT PROJECT ... build ─────────────────┤
-  │           args='build --target check                              │
-  │                 --vars {pr_number: 42}'                           │
-  │                                                 ◄─────────────────┘
+  │     ├── Install Snowflake CLI                            ← ~5s
+  │     │
+  │     ├── EXECUTE DBT PROJECT ... seed  ─────────────────────────────┐
+  │     │     args='seed --target check                                 │
+  │     │           --vars {pr_number: 42}'                             │ Snowflake
+  │     │                                                               │ compute
+  │     └── EXECUTE DBT PROJECT ... build ─────────────────────────────┤
+  │           args='build --select stg_events+ fct_user_revenue+        │
+  │                 --target check --vars {pr_number: 42}'              │
+  │                                                 ◄────────────────────┘
   │
   └── Pass / Fail → GitHub status check → branch protection
 ```
 
-The PR number is passed as a dbt variable (`--vars {pr_number: 42}`), which the `check` target in `profiles.yml` uses to build the per-PR schema name:
-```
-schema: "dbt_pr_{{ var('pr_number', 'ci') }}"  →  dbt_pr_42
-```
+If no model files changed (docs-only PR, config changes, etc.) the `--select` is omitted and dbt runs a full build as a safe fallback.
 
 ### Schema naming per PR
 
@@ -163,20 +163,6 @@ schema: "dbt_pr_{{ var('pr_number', 'ci') }}"  →  dbt_pr_42
 | staging | `staging_dbt_pr_42` |
 | intermediate | *(ephemeral)* |
 | marts | `marts_dbt_pr_42` |
-
----
-
-## Roadmap
-
-### Slim CI (`state:modified+`)
-
-Currently CI runs a full `dbt build` on every PR. Slim CI requires `manifest.json` from the last prod run to be accessible to Snowflake compute at execution time.
-
-Planned approach:
-1. After each prod build, store `manifest.json` in a Snowflake internal stage
-2. Reference it in CI builds via `--state @<stage_path>`
-
-This depends on Snowflake-native dbt supporting stage-based `--state` paths. The full build fallback is intentional — safe and correct, just not minimal.
 
 ---
 
