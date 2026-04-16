@@ -3,27 +3,23 @@ default:
 
     prod:
       type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('SNOWFLAKE_USER') }}"
-      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
-      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
-      database: "{{ env_var('SNOWFLAKE_DATABASE') }}"
+      account: ""        # Snowflake session context — leave empty
+      user: ""           # Snowflake session context — leave empty
+      warehouse: TRANSFORM_WH          # replace with your warehouse
+      database: ANALYTICS              # replace with your database
       schema: dbt_prod
-      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
-      role: "{{ env_var('SNOWFLAKE_ROLE', '') }}"
+      role: dbt_prod_role              # replace with your prod role
       threads: 4
       query_tag: dbt_prod
 
     check:
       type: snowflake
-      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
-      user: "{{ env_var('SNOWFLAKE_USER') }}"
-      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
-      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
-      database: "{{ env_var('SNOWFLAKE_CI_DATABASE', env_var('SNOWFLAKE_DATABASE')) }}"
+      account: ""        # Snowflake session context — leave empty
+      user: ""           # Snowflake session context — leave empty
+      warehouse: TRANSFORM_WH          # replace with your warehouse
+      database: ANALYTICS              # replace with your CI database
       schema: "dbt_pr_{{ var('pr_number', 'ci') }}"
-      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE') }}"
-      role: "{{ env_var('SNOWFLAKE_ROLE', '') }}"
+      role: dbt_ci_role                # replace with your CI role
       threads: 4
       query_tag: dbt_ci
 
