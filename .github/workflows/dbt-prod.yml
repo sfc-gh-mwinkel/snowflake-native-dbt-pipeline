@@ -1,0 +1,35 @@
+name: dbt Prod (Snowflake-native)
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  dbt-prod:
+    name: dbt build (prod)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      DBT_PROJECT_FQN: ${{ secrets.DBT_PROJECT_FQN }}
+      SNOWFLAKE_CONNECTIONS_CI_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_CONNECTIONS_CI_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_CONNECTIONS_CI_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      SNOWFLAKE_CONNECTIONS_CI_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_CONNECTIONS_CI_WAREHOUSE: ${{ secrets.SNOWFLAKE_WAREHOUSE }}
+      SNOWFLAKE_CONNECTIONS_CI_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+
+    steps:
+      - name: Install Snowflake CLI
+        uses: Snowflake-Labs/snowflake-cli-action@v1
+        with:
+          cli-version: latest
+
+      - name: Build prod
+        run: |
+          cat > /tmp/prod.sql <<EOF
+          EXECUTE DBT PROJECT $DBT_PROJECT_FQN
+            args='seed build --target prod';
+          EOF
+          snow sql --connection ci -f /tmp/prod.sql

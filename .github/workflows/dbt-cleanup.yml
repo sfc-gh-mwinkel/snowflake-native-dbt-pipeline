@@ -1,0 +1,64 @@
+name: dbt CI Schema Cleanup
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - closed
+
+jobs:
+  cleanup:
+    name: Drop CI schemas for PR ${{ github.event.pull_request.number }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    env:
+      SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+      SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+      SNOWFLAKE_DATABASE: ${{ secrets.SNOWFLAKE_DATABASE }}
+      SNOWFLAKE_CI_DATABASE: ${{ secrets.SNOWFLAKE_CI_DATABASE }}
+      SNOWFLAKE_ROLE: ${{ secrets.SNOWFLAKE_ROLE }}
+      SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
+      PR_NUMBER: ${{ github.event.pull_request.number }}
+
+    steps:
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Snowflake connector
+        run: pip install snowflake-connector-python
+
+      - name: Drop CI schemas
+        run: |
+          python - <<'EOF'
+          import snowflake.connector
+          import os
+
+          pr = os.environ["PR_NUMBER"]
+          database = os.environ.get("SNOWFLAKE_CI_DATABASE") or os.environ["SNOWFLAKE_DATABASE"]
+          suffix = f"_dbt_pr_{pr}"
+
+          conn = snowflake.connector.connect(
+              account=os.environ["SNOWFLAKE_ACCOUNT"],
+              user=os.environ["SNOWFLAKE_USER"],
+              password=os.environ["SNOWFLAKE_PASSWORD"],
+              role=os.environ.get("SNOWFLAKE_ROLE") or None,
+          )
+
+          cur = conn.cursor()
+          cur.execute(f"SHOW SCHEMAS LIKE '%{suffix}' IN DATABASE {database}")
+          schemas = [row[1] for row in cur.fetchall()]
+
+          for schema in schemas:
+              fqn = f"{database}.{schema}"
+              cur.execute(f"DROP SCHEMA IF EXISTS {fqn}")
+              print(f"Dropped schema: {fqn}")
+
+          if not schemas:
+              print(f"No schemas matching %{suffix} found in {database}")
+
+          conn.close()
+          EOF
